@@ -1,0 +1,290 @@
+
+pkgs <- c(
+  "tidyverse",   # dplyr/readr/stringr/stringi? (no), tidyr/ggplot2/forcats/purrr, etc.
+  "arrow",
+  "readxl",
+  "openxlsx",
+  "writexl",
+  "patchwork",
+  "gridExtra",
+  "systemfonts",
+  "stringi"      
+)
+
+invisible(lapply(pkgs, function(p) {
+  suppressPackageStartupMessages(library(p, character.only = TRUE))
+}))
+
+
+# Cargamos funcion de estilos de graficos Sermig
+estilo_gr<- function(){
+  ggplot2::theme(
+    # Estilos del título y subtítulo
+    plot.title = ggplot2::element_text(family = "DM Sans", size = 16, face = "plain", color = "#02445B",margin = margin(b = 12)), 
+    plot.subtitle = ggplot2::element_text(family = "DM Sans", size = 16, margin = ggplot2::margin(9, 0, 9, 0)), 
+    plot.caption = ggplot2::element_blank(), 
+    #plot.margin = margin(b=3),
+    # Estilos de leyendas
+    legend.position = "bottom", legend.text.align = 0, legend.background = ggplot2::element_blank(), 
+    legend.title = ggplot2::element_blank(), legend.key = ggplot2::element_blank(), 
+    legend.text = ggplot2::element_text(family = "DM Sans", size = 16, color = "#02445B"),
+    legend.margin = margin(t = 0, r = 10, b = 0, l = 10),
+    # Estilos de los ejes
+    axis.title = ggplot2::element_blank(), 
+    axis.text = ggplot2::element_text(family = "DM Sans", size = 20, color = "#02445B"), 
+    axis.text.y = ggplot2::element_text(margin = ggplot2::margin(r=7, b = 10)),
+    axis.text.x = ggplot2::element_text(margin = ggplot2::margin(t=0.05)),
+    axis.title.y = ggplot2::element_text(family = "DM Sans", size = 22, color = "#02445B",margin = margin(r = 10,b=12)),
+    axis.title.x = ggplot2::element_text(family = "DM Sans", size = 22, color = "#02445B",margin = margin(t = 2)),
+    axis.ticks = ggplot2::element_blank(), 
+    axis.line = ggplot2::element_blank(), 
+    
+    panel.grid.minor = ggplot2::element_blank(),        
+    panel.grid.major.y = ggplot2::element_line(color = "#cbcbcb"), # Para las rayas de gráfico
+    panel.grid.major.x = ggplot2::element_blank(), 
+    panel.background = ggplot2::element_blank(), 
+    strip.background = ggplot2::element_rect(fill = "white"),     
+    strip.text = ggplot2::element_text(size = 22, hjust = 0)
+  )
+}
+
+formato_punto <- function(x) {
+  format(x, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+}
+
+Porcentaje_ajustado <- function(porcentajes) {
+  # Redondea los porcentajes a 1 dígito
+  por <- round(porcentajes, 1)
+  # Calcula el ajuste para que la suma sea 100
+  ajuste <- round(100 - sum(por), 1)
+  # Suma el ajuste al mayor porcentaje (o al primero, según convenga)
+  idx <- which.max(por)
+  por[idx] <- por[idx] + ajuste
+  return(por)
+}
+
+
+###llamar las bases de datos para hacer comparaciones entre chilenos y extranjeros
+personas_censo <- read_parquet("G:/Censo/bbdd/personas_censo2024.parquet") |>
+  mutate(chi_mig = case_when(
+    p27_nacionalidad_rec == 1 ~ "Chilenos/as",
+    p27_nacionalidad_rec == 2 ~ "Extranjeros/as"
+  )) |>
+  select(-tipo_operativo,-p28_autoid_pueblo,-p28_pueblo_pert,-p30_lengua_indigena, -p30_lengua_indigena_rec,
+         -p32a_dificultad_ver,-p32c_dificultad_mover,-p32d_dificultad_cogni,-p32e_dificultad_cuidado,
+         -p32f_dificultad_comunic)
+
+##llamo vivienda y hogar para traer características de sus viviendas y hogares
+vivienda <- read_parquet("G:/Censo/bbdd/viviendas_censo2024.parquet") |>
+  select(id_vivienda,p2_tipo_vivienda, cant_per,cant_hog, indice_hacinamiento)
+hogares <- read_parquet("G:/Censo/bbdd/hogares_censo2024.parquet") |>
+  mutate(id_hog_viv = paste(id_vivienda, id_hogar)) |>
+  select(id_hog_viv, p12_tenencia_viv,tipologia_hogar)
+
+per_viv <- left_join(personas_censo, vivienda, by = "id_vivienda") |>
+  mutate(indice_hacinamiento =as.character(indice_hacinamiento)) |>
+  mutate(indice_hacinamiento_rec = case_when(
+    indice_hacinamiento == "1" ~ "0. Sin hacinamiento",
+    indice_hacinamiento %in% c("2","3") ~ "1. Hacinamiento"
+  )) |>
+  mutate(id_hog_viv = paste(id_vivienda, id_hogar))
+
+per_hog_viv <- left_join(per_viv, hogares, by = "id_hog_viv")
+
+rm(personas_censo, hogares, vivienda, per_viv)
+
+
+######características sociodemográficas######
+#sexo
+sexo <- per_hog_viv %>% 
+  filter(!is.na(sexo)) |>
+  filter(!is.na(chi_mig)) |>
+  select(chi_mig,sexo) %>% 
+  group_by(chi_mig,sexo) %>% 
+  mutate(
+    sexo_rec = case_when(
+      sexo %in% c(1) ~ "Hombre", # se agrega diferencial o especial
+      sexo %in% c(2) ~ "Mujer"
+    ))%>% 
+  ungroup() %>%
+  group_by(chi_mig,sexo_rec) %>%
+  filter(!is.na(sexo_rec)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+
+#edad
+edad <- per_hog_viv %>% 
+  filter(!is.na(edad_quinquenal)) |>
+  filter(!is.na(chi_mig)) |>
+  select(chi_mig,edad_quinquenal) %>% 
+  group_by(chi_mig,edad_quinquenal) %>% 
+  ungroup() %>%
+  group_by(chi_mig,edad_quinquenal) %>%
+  filter(!is.na(edad_quinquenal)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+write.xlsx(edad, "edad.xlsx")
+
+
+#año de llegada
+table(per_hog_viv$p26_llegada_periodo)
+
+año <- per_hog_viv %>% 
+  filter(!is.na(p26_llegada_periodo)) |>
+  filter(!is.na(chi_mig)) |>
+  filter(edad >= 15) |>
+  select(chi_mig,p26_llegada_periodo) %>% 
+  group_by(chi_mig,p26_llegada_periodo) %>% 
+  mutate(
+    año_llegada = case_when(
+      p26_llegada_periodo %in% c(1) ~ "Entre 2023 y 2024", # se agrega diferencial o especial
+      p26_llegada_periodo %in% c(2) ~ "Entre 2020 y 2022",
+      p26_llegada_periodo %in% c(3) ~ "Entre 2017 y 2019",
+      p26_llegada_periodo %in% c(4:8) ~ "2018 o antes",
+      p26_llegada_periodo == -99 ~ NA_character_
+    ))  |>
+  ungroup() %>%
+  group_by(chi_mig,año_llegada) %>%
+  filter(!is.na(año_llegada)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+
+año <- per_hog_viv %>% 
+  filter(!is.na(p26_llegada_periodo)) |>
+  filter(!is.na(p25_lug_nacimiento_esp)) |>
+  filter(edad >= 15) |>
+  select(p25_lug_nacimiento_esp,p26_llegada_periodo) %>% 
+  group_by(p25_lug_nacimiento_esp,p26_llegada_periodo) %>% 
+  mutate(
+    año_llegada = case_when(
+      p26_llegada_periodo %in% c(1) ~ "Entre 2023 y 2024", # se agrega diferencial o especial
+      p26_llegada_periodo %in% c(2) ~ "Entre 2020 y 2022",
+      p26_llegada_periodo %in% c(3) ~ "Entre 2017 y 2019",
+      p26_llegada_periodo %in% c(4:8) ~ "2018 o antes",
+      p26_llegada_periodo == -99 ~ NA_character_
+    )) |>
+  mutate(
+    País_nacimiento = case_when(
+      p25_lug_nacimiento_esp == 862 ~ "Venezuela",
+      p25_lug_nacimiento_esp == 604 ~ "Perú",
+      p25_lug_nacimiento_esp == 170 ~ "Colombia",
+      p25_lug_nacimiento_esp == 332 ~ "Haití",
+      p25_lug_nacimiento_esp == 32  ~ "Argentina",
+      p25_lug_nacimiento_esp == 68  ~ "Bolivia",
+      p25_lug_nacimiento_esp %in% c(5, 13) ~ "Otros de Latinoamérica",
+      p25_lug_nacimiento_esp %in% c(150, 142, 21, 2, 9) ~ "Otro continente",
+      TRUE ~ NA_character_
+    )) |>
+  ungroup() %>%
+  group_by(País_nacimiento,año_llegada) %>%
+  filter(!is.na(año_llegada)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+######características socioeconómicas######
+
+#leer y escribir
+lesc <- per_hog_viv %>% 
+  filter(!is.na(p37_alfabet)) |>
+  filter(!is.na(chi_mig)) |>
+  filter(edad >= 15) |>
+  select(chi_mig,p37_alfabet) %>% 
+  group_by(chi_mig,p37_alfabet) %>% 
+  mutate(
+    lesc = case_when(
+      p37_alfabet %in% c(1) ~ "Sabe leer y escribir", # se agrega diferencial o especial
+      p37_alfabet %in% c(2) ~ "No sabe leer y escribir",
+      T ~ NA_character_
+    ))%>% 
+  ungroup() %>%
+  group_by(chi_mig,lesc) %>%
+  filter(!is.na(lesc)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+
+#Educación
+educ <- per_hog_viv %>% 
+  filter(!is.na(cine11)) |>
+  filter(!is.na(chi_mig)) |>
+  filter(edad >= 15) |>
+  select(chi_mig,cine11) %>% 
+  group_by(chi_mig,cine11) %>% 
+  mutate(
+    logro_educ = case_when(
+      cine11 %in% c(1:5) ~ "Primaria", # se agrega diferencial o especial
+      cine11 %in% c(6:7) ~ "Secundaria",
+      cine11 %in% c(8:11) ~ "Superior",
+      cine11 == 12 ~ "Diferencial o especial",
+      cine11 == -99 ~ NA_character_
+    ))%>% 
+  ungroup() %>%
+  group_by(chi_mig,logro_educ) %>%
+  filter(!is.na(logro_educ)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+g1 <- ggplot(data = educ, aes(x = chi_mig,y = por,fill = logro_educ)) +
+  geom_col() +
+  estilo_gr() +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), breaks = seq(0,100, by=25)) +
+  scale_fill_manual(values=c("#F8D546", "#1FA4BA", "#8C519B", "#02445B"))+
+  geom_text(aes(label = ifelse(por >= 4, paste0(format(por, nsmall = 1, decimal.mark = ","), "%"), "")), 
+            position = position_stack(vjust = 0.5), 
+            color = "white", size = 6, family = "DM Sans") +
+  geom_hline(yintercept = 0, size = 1, colour = "#cbcbcb") +
+  labs(title = "Distribución por nivel educativo logrado en chilenos/as y extranjeros/as", 
+       x = NULL, fill = NULL, y="Distribución por nivel educativo") +
+  theme(
+    plot.title = element_text(hjust = 0, family = "DM Sans", size = 22, color = "#02445B"),
+    plot.margin = margin(t = 20, r = 20, b = 20, l = 50, unit = "pt"),
+    axis.text.y.left = element_text(size = 18),
+    strip.text.y = element_text(size = 18, color = "#02445B", family = "DM Sans", vjust = 1.5, hjust = 0.6))
+g1
+getwd()
+#setwd("G:/Unidades compartidas/Dirección Nacional - Gabinete - Depto. de Estudios/Censo")
+ggsave("Gráfico ANT4.png", plot = g1, dpi = 300, width = 14, height = 8, device = "png")
+
+
+
+educ <- per_hog_viv %>% 
+  filter(!is.na(cine11)) |>
+  filter(!is.na(p25_lug_nacimiento_esp)) |>
+  filter(edad >= 15) |>
+  select(p25_lug_nacimiento_esp,cine11) %>% 
+  group_by(p25_lug_nacimiento_esp,cine11) %>% 
+  mutate(
+    logro_educ = case_when(
+      cine11 %in% c(1:5) ~ "Primaria", # se agrega diferencial o especial
+      cine11 %in% c(6:7) ~ "Secundaria",
+      cine11 %in% c(8:11) ~ "Superior",
+      cine11 == 12 ~ "Diferencial o especial",
+      cine11 == -99 ~ NA_character_
+    )) |>
+  mutate(
+    País_nacimiento = case_when(
+      p25_lug_nacimiento_esp == 862 ~ "Venezuela",
+      p25_lug_nacimiento_esp == 604 ~ "Perú",
+      p25_lug_nacimiento_esp == 170 ~ "Colombia",
+      p25_lug_nacimiento_esp == 332 ~ "Haití",
+      p25_lug_nacimiento_esp == 32  ~ "Argentina",
+      p25_lug_nacimiento_esp == 68  ~ "Bolivia",
+      p25_lug_nacimiento_esp %in% c(5, 13) ~ "Otros de Latinoamérica",
+      p25_lug_nacimiento_esp %in% c(150, 142, 21, 2, 9) ~ "Otro continente",
+      TRUE ~ NA_character_
+    )) |>
+  ungroup() %>%
+  group_by(País_nacimiento,logro_educ) %>%
+  filter(!is.na(logro_educ)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
