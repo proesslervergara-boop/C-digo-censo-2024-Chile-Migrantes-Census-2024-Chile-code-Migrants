@@ -249,8 +249,6 @@ g1 <- ggplot(data = educ, aes(x = chi_mig,y = por,fill = logro_educ)) +
     axis.text.y.left = element_text(size = 18),
     strip.text.y = element_text(size = 18, color = "#02445B", family = "DM Sans", vjust = 1.5, hjust = 0.6))
 g1
-getwd()
-#setwd("G:/Censo")
 ggsave("Gráfico ANT4.png", plot = g1, dpi = 300, width = 14, height = 8, device = "png")
 
 
