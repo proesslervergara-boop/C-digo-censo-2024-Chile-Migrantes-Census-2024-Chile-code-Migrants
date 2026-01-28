@@ -16,7 +16,7 @@ invisible(lapply(pkgs, function(p) {
 }))
 
 
-# Cargamos funcion de estilos de graficos Sermig
+# Cargamos funcion de estilos de graficos
 estilo_gr<- function(){
   ggplot2::theme(
     # Estilos del título y subtítulo
