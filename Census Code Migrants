@@ -1,3 +1,5 @@
+#' @author: Pablo Roessler Vergara
+#' R-Programming
 
 pkgs <- c(
   "tidyverse",   # dplyr/readr/stringr/stringi? (no), tidyr/ggplot2/forcats/purrr, etc.
