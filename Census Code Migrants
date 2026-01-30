@@ -1,6 +1,9 @@
 #' @author: Pablo Roessler Vergara
 #' R-Programming
 
+#' @author: Pablo Roessler Vergara
+#' R-Programming
+
 pkgs <- c(
   "tidyverse",   # dplyr/readr/stringr/stringi? (no), tidyr/ggplot2/forcats/purrr, etc.
   "arrow",
@@ -17,8 +20,7 @@ invisible(lapply(pkgs, function(p) {
   suppressPackageStartupMessages(library(p, character.only = TRUE))
 }))
 
-
-# Cargamos funcion de estilos de graficos
+# Cargamos funcion de estilos de graficos Sermig
 estilo_gr<- function(){
   ggplot2::theme(
     # Estilos del título y subtítulo
@@ -91,85 +93,7 @@ per_viv <- left_join(personas_censo, vivienda, by = "id_vivienda") |>
   )) |>
   mutate(id_hog_viv = paste(id_vivienda, id_hogar))
 
-per_hog_viv <- left_join(per_viv, hogares, by = "id_hog_viv")
-
-rm(personas_censo, hogares, vivienda, per_viv)
-
-
-######características sociodemográficas######
-#sexo
-sexo <- per_hog_viv %>% 
-  filter(!is.na(sexo)) |>
-  filter(!is.na(chi_mig)) |>
-  select(chi_mig,sexo) %>% 
-  group_by(chi_mig,sexo) %>% 
-  mutate(
-    sexo_rec = case_when(
-      sexo %in% c(1) ~ "Hombre", # se agrega diferencial o especial
-      sexo %in% c(2) ~ "Mujer"
-    ))%>% 
-  ungroup() %>%
-  group_by(chi_mig,sexo_rec) %>%
-  filter(!is.na(sexo_rec)) |>
-  dplyr::summarise(n = dplyr::n()) |>
-  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
-  mutate(por = Porcentaje_ajustado(por))
-
-
-#edad
-edad <- per_hog_viv %>% 
-  filter(!is.na(edad_quinquenal)) |>
-  filter(!is.na(chi_mig)) |>
-  select(chi_mig,edad_quinquenal) %>% 
-  group_by(chi_mig,edad_quinquenal) %>% 
-  ungroup() %>%
-  group_by(chi_mig,edad_quinquenal) %>%
-  filter(!is.na(edad_quinquenal)) |>
-  dplyr::summarise(n = dplyr::n()) |>
-  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
-  mutate(por = Porcentaje_ajustado(por))
-write.xlsx(edad, "edad.xlsx")
-
-
-#año de llegada
-table(per_hog_viv$p26_llegada_periodo)
-
-año <- per_hog_viv %>% 
-  filter(!is.na(p26_llegada_periodo)) |>
-  filter(!is.na(chi_mig)) |>
-  filter(edad >= 15) |>
-  select(chi_mig,p26_llegada_periodo) %>% 
-  group_by(chi_mig,p26_llegada_periodo) %>% 
-  mutate(
-    año_llegada = case_when(
-      p26_llegada_periodo %in% c(1) ~ "Entre 2023 y 2024", # se agrega diferencial o especial
-      p26_llegada_periodo %in% c(2) ~ "Entre 2020 y 2022",
-      p26_llegada_periodo %in% c(3) ~ "Entre 2017 y 2019",
-      p26_llegada_periodo %in% c(4:8) ~ "2018 o antes",
-      p26_llegada_periodo == -99 ~ NA_character_
-    ))  |>
-  ungroup() %>%
-  group_by(chi_mig,año_llegada) %>%
-  filter(!is.na(año_llegada)) |>
-  dplyr::summarise(n = dplyr::n()) |>
-  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
-  mutate(por = Porcentaje_ajustado(por))
-
-
-año <- per_hog_viv %>% 
-  filter(!is.na(p26_llegada_periodo)) |>
-  filter(!is.na(p25_lug_nacimiento_esp)) |>
-  filter(edad >= 15) |>
-  select(p25_lug_nacimiento_esp,p26_llegada_periodo) %>% 
-  group_by(p25_lug_nacimiento_esp,p26_llegada_periodo) %>% 
-  mutate(
-    año_llegada = case_when(
-      p26_llegada_periodo %in% c(1) ~ "Entre 2023 y 2024", # se agrega diferencial o especial
-      p26_llegada_periodo %in% c(2) ~ "Entre 2020 y 2022",
-      p26_llegada_periodo %in% c(3) ~ "Entre 2017 y 2019",
-      p26_llegada_periodo %in% c(4:8) ~ "2018 o antes",
-      p26_llegada_periodo == -99 ~ NA_character_
-    )) |>
+per_hog_viv <- left_join(per_viv, hogares, by = "id_hog_viv") |>
   mutate(
     País_nacimiento = case_when(
       p25_lug_nacimiento_esp == 862 ~ "Venezuela",
@@ -181,6 +105,70 @@ año <- per_hog_viv %>%
       p25_lug_nacimiento_esp %in% c(5, 13) ~ "Otros de Latinoamérica",
       p25_lug_nacimiento_esp %in% c(150, 142, 21, 2, 9) ~ "Otro continente",
       TRUE ~ NA_character_
+    ))
+
+rm(personas_censo, hogares, vivienda, per_viv)
+
+
+######características sociodemográficas######
+#sexo
+sexo <- per_hog_viv |>
+  filter(!is.na(sexo), !is.na(chi_mig)) |>
+  mutate(
+    sexo_rec = case_when(
+      sexo == 1 ~ "Hombre",
+      sexo == 2 ~ "Mujer",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  filter(!is.na(sexo_rec)) |>
+  count(chi_mig, sexo_rec, name = "n") |>
+  group_by(chi_mig) |>
+  mutate(
+    por = round(n * 100 / sum(n), 1),
+    por = Porcentaje_ajustado(por)
+  ) |>
+  ungroup()
+
+#edad
+edad <- per_hog_viv %>% 
+  filter(!is.na(edad_quinquenal), !is.na(chi_mig)) |>
+  group_by(chi_mig,edad_quinquenal) %>%
+  filter(!is.na(edad_quinquenal)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+#año de llegada
+table(per_hog_viv$p26_llegada_periodo)
+
+año <- per_hog_viv |>
+  filter(!is.na(p26_llegada_periodo), chi_mig == "Extranjeros/as", edad >= 15) |>
+  mutate(
+    año_llegada = case_when(
+      p26_llegada_periodo == 1 ~ "Entre 2023 y 2024",
+      p26_llegada_periodo == 2 ~ "Entre 2020 y 2022",
+      p26_llegada_periodo == 3 ~ "Entre 2017 y 2019",
+      p26_llegada_periodo %in% 4:8 ~ "2018 o antes",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  group_by(año_llegada) %>%
+  filter(!is.na(año_llegada)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+
+año2 <- per_hog_viv %>% 
+  filter(!is.na(p26_llegada_periodo),!is.na(p25_lug_nacimiento_esp)) |>
+  mutate(
+    año_llegada = case_when(
+      p26_llegada_periodo %in% c(1) ~ "Entre 2023 y 2024", 
+      p26_llegada_periodo %in% c(2) ~ "Entre 2020 y 2022",
+      p26_llegada_periodo %in% c(3) ~ "Entre 2017 y 2019",
+      p26_llegada_periodo %in% c(4:8) ~ "2018 o antes",
+      p26_llegada_periodo == -99 ~ NA_character_
     )) |>
   ungroup() %>%
   group_by(País_nacimiento,año_llegada) %>%
@@ -193,14 +181,10 @@ año <- per_hog_viv %>%
 
 #leer y escribir
 lesc <- per_hog_viv %>% 
-  filter(!is.na(p37_alfabet)) |>
-  filter(!is.na(chi_mig)) |>
-  filter(edad >= 15) |>
-  select(chi_mig,p37_alfabet) %>% 
-  group_by(chi_mig,p37_alfabet) %>% 
+  filter(!is.na(p37_alfabet),!is.na(chi_mig), edad >= 15) |>
   mutate(
     lesc = case_when(
-      p37_alfabet %in% c(1) ~ "Sabe leer y escribir", # se agrega diferencial o especial
+      p37_alfabet %in% c(1) ~ "Sabe leer y escribir", 
       p37_alfabet %in% c(2) ~ "No sabe leer y escribir",
       T ~ NA_character_
     ))%>% 
@@ -214,14 +198,10 @@ lesc <- per_hog_viv %>%
 
 #Educación
 educ <- per_hog_viv %>% 
-  filter(!is.na(cine11)) |>
-  filter(!is.na(chi_mig)) |>
-  filter(edad >= 15) |>
-  select(chi_mig,cine11) %>% 
-  group_by(chi_mig,cine11) %>% 
+  filter(!is.na(cine11),!is.na(chi_mig), edad >= 15) |>
   mutate(
     logro_educ = case_when(
-      cine11 %in% c(1:5) ~ "Primaria", # se agrega diferencial o especial
+      cine11 %in% c(1:5) ~ "Primaria", 
       cine11 %in% c(6:7) ~ "Secundaria",
       cine11 %in% c(8:11) ~ "Superior",
       cine11 == 12 ~ "Diferencial o especial",
@@ -234,52 +214,46 @@ educ <- per_hog_viv %>%
   dplyr::mutate(por = round(n*100 / sum(n),1)) |>
   mutate(por = Porcentaje_ajustado(por))
 
-g1 <- ggplot(data = educ, aes(x = chi_mig,y = por,fill = logro_educ)) +
+g1 <- ggplot(educ, aes(chi_mig, por, fill = logro_educ)) +
   geom_col() +
   estilo_gr() +
-  scale_y_continuous(labels = scales::percent_format(scale = 1), breaks = seq(0,100, by=25)) +
-  scale_fill_manual(values=c("#F8D546", "#1FA4BA", "#8C519B", "#02445B"))+
-  geom_text(aes(label = ifelse(por >= 4, paste0(format(por, nsmall = 1, decimal.mark = ","), "%"), "")), 
-            position = position_stack(vjust = 0.5), 
-            color = "white", size = 6, family = "DM Sans") +
-  geom_hline(yintercept = 0, size = 1, colour = "#cbcbcb") +
-  labs(title = "Distribución por nivel educativo logrado en chilenos/as y extranjeros/as", 
-       x = NULL, fill = NULL, y="Distribución por nivel educativo") +
+  scale_y_continuous(
+    labels = scales::percent_format(scale = 1),
+    breaks = seq(0, 100, 25)
+  ) +
+  scale_fill_manual(values = c("#F8D546", "#1FA4BA", "#8C519B", "#02445B")) +
+  geom_text(
+    aes(label = if_else(por >= 4,
+                        paste0(format(por, nsmall = 1, decimal.mark = ","), "%"),
+                        "")),
+    position = position_stack(vjust = 0.5),
+    color = "white", size = 6, family = "DM Sans"
+  ) +
+  geom_hline(yintercept = 0, linewidth = 1, colour = "#cbcbcb") +
+  labs(
+    title = "Distribución por nivel educativo logrado en chilenos/as y extranjeros/as",
+    x = NULL, y = "Distribución por nivel educativo", fill = NULL
+  ) +
   theme(
     plot.title = element_text(hjust = 0, family = "DM Sans", size = 22, color = "#02445B"),
     plot.margin = margin(t = 20, r = 20, b = 20, l = 50, unit = "pt"),
     axis.text.y.left = element_text(size = 18),
-    strip.text.y = element_text(size = 18, color = "#02445B", family = "DM Sans", vjust = 1.5, hjust = 0.6))
+    strip.text.y = element_text(size = 18, color = "#02445B", family = "DM Sans", vjust = 1.5, hjust = 0.6)
+  )
 g1
+getwd()
 ggsave("Gráfico ANT4.png", plot = g1, dpi = 300, width = 14, height = 8, device = "png")
 
 
-
-educ <- per_hog_viv %>% 
-  filter(!is.na(cine11)) |>
-  filter(!is.na(p25_lug_nacimiento_esp)) |>
-  filter(edad >= 15) |>
-  select(p25_lug_nacimiento_esp,cine11) %>% 
-  group_by(p25_lug_nacimiento_esp,cine11) %>% 
+educ2 <- per_hog_viv %>% 
+  filter(!is.na(cine11),!is.na(p25_lug_nacimiento_esp),edad >= 15) |>
   mutate(
     logro_educ = case_when(
-      cine11 %in% c(1:5) ~ "Primaria", # se agrega diferencial o especial
+      cine11 %in% c(1:5) ~ "Primaria", 
       cine11 %in% c(6:7) ~ "Secundaria",
       cine11 %in% c(8:11) ~ "Superior",
       cine11 == 12 ~ "Diferencial o especial",
       cine11 == -99 ~ NA_character_
-    )) |>
-  mutate(
-    País_nacimiento = case_when(
-      p25_lug_nacimiento_esp == 862 ~ "Venezuela",
-      p25_lug_nacimiento_esp == 604 ~ "Perú",
-      p25_lug_nacimiento_esp == 170 ~ "Colombia",
-      p25_lug_nacimiento_esp == 332 ~ "Haití",
-      p25_lug_nacimiento_esp == 32  ~ "Argentina",
-      p25_lug_nacimiento_esp == 68  ~ "Bolivia",
-      p25_lug_nacimiento_esp %in% c(5, 13) ~ "Otros de Latinoamérica",
-      p25_lug_nacimiento_esp %in% c(150, 142, 21, 2, 9) ~ "Otro continente",
-      TRUE ~ NA_character_
     )) |>
   ungroup() %>%
   group_by(País_nacimiento,logro_educ) %>%
@@ -288,3 +262,115 @@ educ <- per_hog_viv %>%
   dplyr::mutate(por = round(n*100 / sum(n),1)) |>
   mutate(por = Porcentaje_ajustado(por))
 
+
+#situación laboral
+sitlab <- per_hog_viv %>% 
+  filter(!is.na(sit_fuerza_trabajo),!is.na(chi_mig),edad >= 15) |>
+  mutate(
+    sit_laboral = case_when(
+      sit_fuerza_trabajo %in% c(1) ~ "Ocupado", 
+      sit_fuerza_trabajo %in% c(2) ~ "Desocupado",
+      sit_fuerza_trabajo %in% c(3) ~ "Fuera de la fuerza laboral",
+      sit_fuerza_trabajo == -99 ~ NA_character_
+    ))%>% 
+  ungroup() %>%
+  group_by(chi_mig,sit_laboral) %>%
+  filter(!is.na(sit_laboral)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+g2 <- ggplot(data = sitlab, aes(x = chi_mig,y = por,fill = sit_laboral)) +
+  geom_col() +
+  estilo_gr() +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), breaks = seq(0,100, by=25)) +
+  scale_fill_manual(values=c("#3170B6","#8C519B","#2E3192"))+
+  geom_text(aes(label = ifelse(por >= 4, paste0(format(por, nsmall = 1, decimal.mark = ","), "%"), "")), 
+            position = position_stack(vjust = 0.5), 
+            color = "white", size = 6, family = "DM Sans") +
+  geom_hline(yintercept = 0, size = 1, colour = "#cbcbcb") +
+  labs(title = "Distribución por situación en la fuerza de trabajo en chilenos/as y extranjeros/as", 
+       x = NULL, fill = NULL, y="Distribución por situación en la fuerza de trabajo") +
+  theme(
+    plot.title = element_text(hjust = 0, family = "DM Sans", size = 22, color = "#02445B"),
+    plot.margin = margin(t = 20, r = 20, b = 20, l = 50, unit = "pt"),
+    axis.text.y.left = element_text(size = 18),
+    strip.text.y = element_text(size = 18, color = "#02445B", family = "DM Sans", vjust = 1.5, hjust = 0.6))
+g2
+ggsave("Gráficos/Gráfico 2 situación laboral.png", plot = g2, dpi = 300, width = 14, height = 8, device = "png")
+
+
+sitlab2 <- per_hog_viv %>% 
+  filter(!is.na(sit_fuerza_trabajo),!is.na(p25_lug_nacimiento_esp),edad >= 15) |>
+  mutate(
+    sit_laboral = case_when(
+      sit_fuerza_trabajo %in% c(1) ~ "Ocupado", 
+      sit_fuerza_trabajo %in% c(2) ~ "Desocupado",
+      sit_fuerza_trabajo %in% c(3) ~ "Fuera de la fuerza laboral",
+      sit_fuerza_trabajo == -99 ~ NA_character_
+    )) |>
+  ungroup() %>%
+  group_by(País_nacimiento,sit_laboral) %>%
+  filter(!is.na(sit_laboral)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+
+sitlab3 <- per_hog_viv %>% 
+  filter(!is.na(sit_fuerza_trabajo),!is.na(region)) |>
+  filter(edad >= 15 & chi_mig == "Extranjeros/as") |>
+  mutate(
+    sit_laboral = case_when(
+      sit_fuerza_trabajo %in% c(1) ~ "Ocupado", 
+      sit_fuerza_trabajo %in% c(2) ~ "Desocupado",
+      sit_fuerza_trabajo %in% c(3) ~ "Fuera de la fuerza laboral",
+      sit_fuerza_trabajo == -99 ~ NA_character_
+    ))%>% 
+  ungroup() %>%
+  group_by(region,sit_laboral) %>%
+  filter(!is.na(sit_laboral)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+
+orden_eco <- c(
+  "Económicamente independiente",
+  "Económicamente dependiente")
+
+#dependencia económica
+dep_eco <- per_hog_viv %>% 
+  filter(!is.na(depend_econ_deficit_hab),!is.na(chi_mig),edad >= 15) |>
+  mutate(
+    depend_economica = case_when(
+      depend_econ_deficit_hab == 1 ~ "Económicamente independiente",
+      depend_econ_deficit_hab == 2 ~ "Económicamente dependiente",
+      is.na(depend_econ_deficit_hab) ~ NA_character_,
+    ),
+    depend_economica = factor(depend_economica, levels = orden_eco)) %>% 
+  ungroup() %>%
+  group_by(chi_mig,depend_economica) %>%
+  filter(!is.na(depend_economica)) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::mutate(por = round(n*100 / sum(n),1)) |>
+  mutate(por = Porcentaje_ajustado(por))
+
+g2 <- ggplot(data = dep_eco, aes(x = chi_mig,y = por,fill = depend_economica)) +
+  geom_col() +
+  estilo_gr() +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), breaks = seq(0,100, by=25)) +
+  scale_fill_manual(values=c("#3170B6","#8C519B"))+
+  geom_text(aes(label = ifelse(por >= 4, paste0(format(por, nsmall = 1, decimal.mark = ","), "%"), "")), 
+            position = position_stack(vjust = 0.5), 
+            color = "white", size = 6, family = "DM Sans") +
+  geom_hline(yintercept = 0, size = 1, colour = "#cbcbcb") +
+  labs(title = "Distribución según situación de dependencia económica en chilenos/as y \nextranjeros/as", 
+       x = NULL, fill = NULL, y="Distribución según situación de dependencia \neconómica") +
+  theme(
+    plot.title = element_text(hjust = 0, family = "DM Sans", size = 22, color = "#02445B"),
+    plot.margin = margin(t = 20, r = 20, b = 20, l = 50, unit = "pt"),
+    axis.text.y.left = element_text(size = 18),
+    strip.text.y = element_text(size = 18, color = "#02445B", family = "DM Sans", vjust = 1.5, hjust = 0.6))
+g2
+ggsave("Gráficos/Gráfico 5 índice dependencia económica.png", plot = g2, dpi = 300, width = 14, height = 8, device = "png")
