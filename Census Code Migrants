@@ -68,9 +68,9 @@ Porcentaje_ajustado <- function(porcentajes) {
 ###llamar las bases de datos para hacer comparaciones entre chilenos y extranjeros
 personas_censo <- read_parquet("G:/Censo/bbdd/personas_censo2024.parquet") |>
   mutate(chi_mig = case_when(
-    p27_nacionalidad_rec == 1 ~ "Chilenos/as",
-    p27_nacionalidad_rec == 2 ~ "Extranjeros/as"
-  )) |>
+    p25_lug_nacimiento_rec == 1 ~ "Chilenos/as",
+    p25_lug_nacimiento_rec == 2 ~ "Extranjeros/as"
+  ))  |>
   select(-tipo_operativo,-p28_autoid_pueblo,-p28_pueblo_pert,-p30_lengua_indigena, -p30_lengua_indigena_rec,
          -p32a_dificultad_ver,-p32c_dificultad_mover,-p32d_dificultad_cogni,-p32e_dificultad_cuidado,
          -p32f_dificultad_comunic)
